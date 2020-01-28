@@ -28,6 +28,27 @@ class BooleanFormula:
     def get_actual_contents(self):
         return self.sub_formulae
 
+    def to_string(self, and_str="&&", or_str="||", not_str="~", left_par_str="(", right_par_str=")", with_spaces=False):
+        if self.type == BF_POS_LIT:
+            return str(self.sub_formulae[0])
+        if self.type == BF_NEG_LIT:
+            return "".join([not_str, str(self.sub_formulae[0])])
+        if self.type == BF_NOT:
+            return "".join([not_str, self.sub_formulae[0].to_string(and_str, or_str, not_str, left_par_str, right_par_str, with_spaces)])
+
+        divider = and_str
+        if self.type == BF_OR:
+            divider = or_str
+        if with_spaces:
+            divider = "".join([" ", divider, " "])
+        strs = [divider for i in range(0, len(self.sub_formulae) * 2 + 1)]
+        strs[0] = left_par_str
+        strs[-1] = right_par_str
+        for i in range(0, len(self.sub_formulae)):
+            strs[1 + 2*i] = self.sub_formulae[i].to_string(and_str, or_str, not_str, left_par_str, right_par_str, with_spaces)
+        return "".join(strs)
+        
+
 class BooleanFormulaeBank:
 
     def __init__(self):
@@ -151,8 +172,152 @@ class BooleanFormulaeBank:
                 if container_f.get_type() == BF_NOT:
                     self.replace_all_occurrences_of_formula(container_f, self.reference_formula(opposite_lit))
 
-    def gen_formula_from_string(self, s):
-        pass
+    def gen_formula_from_string(self, s, and_str="&&", or_str="||", not_str="~", left_par_str="(", right_par_str=")"):
+        return self.init_from_string_in_place(s, and_str=and_str, or_str=or_str, not_str = not_str, left_par_str=left_par_str, right_par_str=right_par_str)
+
+    def clean_string_in_place(self, s, start_pos=None, end_pos=None, and_str="&&", or_str="||", not_str="~", left_par_str="(", right_par_str=")"):
+        # Remove whitespace.
+        first_clean = start_pos is None
+        if first_clean:
+            s2 = ""
+            for c in s:
+                if c != " ":
+                    s2 += c
+            s = s2
+            start_pos = 0
+            end_pos = len(s)
+
+        # Remove extra parens at start and end if there are any extras.
+        # (determined by lowest point reached before the end of the string and AFTER at least one left paren)
+        first_climb_height = 0
+        end_of_first_climb = start_pos
+        idx = start_pos
+        while idx < end_pos and s.startswith(left_par_str, idx):
+            idx += len(left_par_str)
+            first_climb_height += 1
+        end_of_first_climb = idx
+
+        last_descent_height = 0
+        start_of_last_descent = start_pos
+        idx = end_pos
+        while idx > start_pos and s.startswith(right_par_str, idx - len(right_par_str)):
+            idx -= len(right_par_str)
+            last_descent_height += 1
+        start_of_last_descent = idx
+
+        parens_to_remove = 0
+        if end_of_first_climb + 1 == start_of_last_descent:
+            if first_climb_height != last_descent_height:
+                print("JUSTUS DOES NOT KNOW WHAT HE IS DOING! ABORT! :(")
+                exit(1)
+            parens_to_remove = first_climb_height
+        elif first_climb_height > 0:
+            idx = end_of_first_climb
+            parens_to_remove = first_climb_height
+            height = first_climb_height
+            while idx < start_of_last_descent:
+                if s.startswith(left_par_str, idx):
+                    idx += len(left_par_str)
+                    height += 1
+                elif s.startswith(right_par_str, idx):
+                    idx += len(right_par_str)
+                    height -= 1
+                    if height < parens_to_remove:
+                        parens_to_remove = height
+                    if height < 0:
+                        raise ValueError("ERROR: malformed parentheses (or code??)")
+                else:
+                    idx += 1
+            if height != last_descent_height:
+                raise ValueError("ERROR: malformed parentheses")
+        new_start = start_pos + parens_to_remove * len(left_par_str)
+        new_end = end_pos - parens_to_remove * len(right_par_str)
+        if first_clean: # If this is the very first clean (whitespace was removed).
+            s = s[new_start:new_end]
+            new_start = 0
+            new_end = len(s)
+        return s, new_start, new_end
+
+    def init_from_string_in_place(self, s, start_pos=None, end_pos=None, and_str="&&", or_str="||", not_str="~",\
+            left_par_str="(", right_par_str=")"):
+
+        s, start_pos, end_pos = self.clean_string_in_place(s, start_pos, end_pos, and_str=and_str, or_str=or_str, not_str=not_str,\
+            left_par_str=left_par_str, right_par_str=right_par_str)
+
+        type_val = 0
+        sub_formulae_vals = []
+
+        # Partition
+        segments = []
+        height = 0
+        main_op = None
+        starts_with_not = False
+        idx = start_pos
+        next_segment_start = start_pos
+        while idx < end_pos:
+            if s.startswith(and_str, idx):
+                idx += len(and_str)
+                if height == 0:
+                    if main_op is None or main_op == BF_AND:
+                        main_op = BF_AND
+                        seg_end_pos = idx - len(and_str)
+                        segments.append((next_segment_start, seg_end_pos))
+                        next_segment_start = idx
+                    else: # main_op is BF_OR
+                        idx = end_pos # i.e. done
+
+            elif s.startswith(or_str, idx):
+                idx += len(or_str)
+                if height == 0:
+                    if main_op is None or main_op == BF_OR:
+                        main_op = BF_OR
+                        seg_end_pos = idx - len(or_str)
+                        segments.append((next_segment_start,seg_end_pos))
+                        next_segment_start = idx
+                    else: # main op is BF_AND
+                        idx = end_pos # i.e. done
+
+            elif s.startswith(not_str, idx):
+                if idx == start_pos:
+                    starts_with_not = True
+                idx += len(not_str)
+
+            elif s.startswith(left_par_str, idx):
+                idx += len(left_par_str)
+                height += 1
+
+            elif s.startswith(right_par_str, idx):
+                idx += len(right_par_str)
+                height -= 1
+
+            else: # presumed to be part of a literal
+                idx += 1
+
+        if next_segment_start == start_pos:
+            if starts_with_not:
+                new_start_pos = start_pos + len(not_str)
+                negated_formula = self.init_from_string_in_place(s, start_pos=new_start_pos, end_pos=end_pos, \
+                    and_str=and_str, or_str=or_str, not_str=not_str, left_par_str=left_par_str, right_par_str=right_par_str)
+                type_val = BF_NOT
+                sub_formulae_vals = [negated_formula]
+            else:
+                literal = s[start_pos:end_pos]
+                type_val = BF_POS_LIT
+                sub_formulae_vals = [literal]
+        else:
+            segments.append((next_segment_start,end_pos))
+            # print("It's an oppy op!")
+            # print(segments)
+            type_val = main_op
+            for segment in segments:
+                sub_formulae_vals.append(\
+                    self.init_from_string_in_place(s, start_pos=segment[0], end_pos=segment[1], \
+                        and_str=and_str, or_str=or_str, not_str=not_str, left_par_str=left_par_str, right_par_str=right_par_str))
+
+        print(type_val)
+        print(sub_formulae_vals)
+        return self.reference_formula(BooleanFormula(type_val, sub_formulae_vals, None))
+
 """
 BFB = BooleanFormulaeBank()
 f1 = BFB.gen_literal_formula(BF_POS_LIT, "x1")
@@ -162,14 +327,20 @@ f4 = BFB.gen_op_formula(BF_AND, [f1, f2])
 f5 = BFB.gen_op_formula(BF_NOT, [f1])
 f6 = BFB.gen_op_formula(BF_NOT, [f4])
 f7 = BFB.gen_op_formula(BF_NOT, [f6])
+f8 = BFB.gen_op_formula(BF_OR, [f3, f6])
 print(f5.get_type() == BF_NEG_LIT)
 print(f6.get_type() == BF_NOT)
 print(f7.get_type() == BF_AND)
 print(f7 == f4)
+print(f8.to_string(with_spaces=True))
 BFB.replace_all_occurrences_of_formula(f4, f3)
 print("----------------------------")
 for i, f in BFB.id_to_formula.items():
     print("")
     print(f.get_type())
     print(f.get_contents())
+
+f9 = BFB.gen_formula_from_string("(a && b) && (~a || ~(c || bug))")
+print(f9.to_string(with_spaces=True))
+print(BFB.gen_formula_from_string("~(~a)").to_string()) # TODO: Make this return "a"
 """
