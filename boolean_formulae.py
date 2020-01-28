@@ -302,8 +302,7 @@ class BooleanFormulaeBank:
                 sub_formulae_vals = [negated_formula]
             else:
                 literal = s[start_pos:end_pos]
-                type_val = BF_POS_LIT
-                sub_formulae_vals = [literal]
+                return self.gen_literal_formula(BF_POS_LIT, literal)
         else:
             segments.append((next_segment_start,end_pos))
             # print("It's an oppy op!")
@@ -316,7 +315,7 @@ class BooleanFormulaeBank:
 
         print(type_val)
         print(sub_formulae_vals)
-        return self.reference_formula(BooleanFormula(type_val, sub_formulae_vals, None))
+        return self.gen_op_formula(type_val, sub_formulae_vals)
 
 """
 BFB = BooleanFormulaeBank()
@@ -342,5 +341,5 @@ for i, f in BFB.id_to_formula.items():
 
 f9 = BFB.gen_formula_from_string("(a && b) && (~a || ~(c || bug))")
 print(f9.to_string(with_spaces=True))
-print(BFB.gen_formula_from_string("~(~a)").to_string()) # TODO: Make this return "a"
+print(BFB.gen_formula_from_string("~~a").to_string())
 """
