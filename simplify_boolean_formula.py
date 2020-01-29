@@ -9,6 +9,7 @@ result = qm.simplify([4, 5, 2, 1], [])
 print(result)
 
 # Check out https://users.ece.utexas.edu/~patt/06s.382N/tutorial/espresso_manual.html
+# Also: http://www.ecs.umass.edu/ece/labs/vlsicad/ece667/links/espresso.html
 
 # The QM solver takes a list of integers, which state that:
 # if the bits exactly match that integer, the function returns solvable.
