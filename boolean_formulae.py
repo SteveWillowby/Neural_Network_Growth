@@ -100,7 +100,7 @@ class BooleanFormulaeBank:
 
         return self.reference_formula(BooleanFormula(t, [variable], None))
 
-    # Assumes that the sub_formulae have already been added to the bank.
+    # Assumes that the sub_formulae have already been added to the bank. -- Does it?
     def gen_op_formula(self, operator, sub_formulae):
         if operator == BF_NOT:
             if len(sub_formulae) != 1:
@@ -111,9 +111,29 @@ class BooleanFormulaeBank:
                 return self.reference_formula(BooleanFormula(BF_POS_LIT, sub_formulae[0].get_contents(), None))
             if sub_formulae[0].get_type() == BF_NOT:
                 return self.reference_formula(sub_formulae[0].get_contents()[0])
+
         elif operator == BF_AND or operator == BF_OR:
-            if len(sub_formulae) < 2:
-                raise ValueError("Error! Cannot create an AND or and OR formula with fewer than 2 sub-formulae")
+            if len(sub_formulae) == 0:
+                raise ValueError("Error! Cannot create an AND or and OR formula with no sub-formulae")
+
+            candidate_sub_formulae = []
+            for sub_f in sub_formulae:
+                if sub_f.get_type() == operator:
+                    candidate_sub_formulae += sub_f.get_contents()
+                else:
+                    candidate_sub_formulae.append(sub_f)
+
+            ids = set()
+            sub_formulae_unique = []
+            for sub_f in candidate_sub_formulae:
+                if sub_f.get_id() in ids:
+                    continue
+                ids.add(sub_f.get_id())
+                sub_formulae_unique.append(sub_f)
+            sub_formulae = sub_formulae_unique
+            if len(sub_formulae) == 1:
+                return self.reference_formula(sub_formulae[0])
+
         else:
             raise ValueError("Error! operator is not one of the operator types")
 
@@ -154,13 +174,14 @@ class BooleanFormulaeBank:
         del self.id_to_containing_ids[orig_id]
         del self.id_to_formula[orig_id]
 
-        # Handle double-negatives and negations of literals.
+        # Prevent negations of negations.
         if replacement.get_type() == BF_NOT:
             for container_id in list(self.id_to_containing_ids[replacement_id]): # Copied because the original might be modified by the loop.
                 container_f = self.id_to_formula[container_id]
                 if container_f.get_type() == BF_NOT:
                     self.replace_all_occurrences_of_formula(container_f, replacement.get_contents()[0])
 
+        # Prevent negations of literals.
         if replacement.get_type() == BF_POS_LIT or replacement.get_type() == BF_NEG_LIT:
             opposite_type = BF_POS_LIT
             if opposite_type == replacement.get_type():
@@ -171,6 +192,14 @@ class BooleanFormulaeBank:
                 container_f = self.id_to_formula[container_id]
                 if container_f.get_type() == BF_NOT:
                     self.replace_all_occurrences_of_formula(container_f, self.reference_formula(opposite_lit))
+
+        # Prevent ands-of-ands and ors-of-ors.
+        if replacement.get_type() == BF_OR or replacement.get_type() == BF_AND:
+            for container_id in list(self.id_to_containing_ids[replacement_id]): # Copied because the original might be modified by the loop.
+                container_f = self.id_to_formula[container_id]
+                if container_f.get_type() == replacement.get_type(): # Flatten the above formula to directly contain replacement's contents.
+                    content_union = replacement.get_contents() + list(set(container_f.get_contents()) - set([replacement_id]))
+                    self.replace_all_occurrences_of_formula(container_f, self.gen_op_formula(replacement.get_type(), content_union))
 
     def gen_formula_from_string(self, s, and_str="&&", or_str="||", not_str="~", left_par_str="(", right_par_str=")"):
         return self.init_from_string_in_place(s, and_str=and_str, or_str=or_str, not_str = not_str, left_par_str=left_par_str, right_par_str=right_par_str)
@@ -313,8 +342,6 @@ class BooleanFormulaeBank:
                     self.init_from_string_in_place(s, start_pos=segment[0], end_pos=segment[1], \
                         and_str=and_str, or_str=or_str, not_str=not_str, left_par_str=left_par_str, right_par_str=right_par_str))
 
-        print(type_val)
-        print(sub_formulae_vals)
         return self.gen_op_formula(type_val, sub_formulae_vals)
 
 """
@@ -327,17 +354,21 @@ f5 = BFB.gen_op_formula(BF_NOT, [f1])
 f6 = BFB.gen_op_formula(BF_NOT, [f4])
 f7 = BFB.gen_op_formula(BF_NOT, [f6])
 f8 = BFB.gen_op_formula(BF_OR, [f3, f6])
+f9 = BFB.gen_op_formula(BF_AND, [f4, f1])
+f10 = BFB.gen_literal_formula(BF_POS_LIT, "x3")
+f11 = BFB.gen_op_formula(BF_AND, [f3, f10])
+f12 = BFB.gen_op_formula(BF_AND, [f1, f1, f1, f2, f3])
+BFB.replace_all_occurrences_of_formula(f10, f4)
 print(f5.get_type() == BF_NEG_LIT)
 print(f6.get_type() == BF_NOT)
 print(f7.get_type() == BF_AND)
 print(f7 == f4)
-print(f8.to_string(with_spaces=True))
-BFB.replace_all_occurrences_of_formula(f4, f3)
-print("----------------------------")
+print(f9 == f4)
+print(f11.get_id() not in BFB.id_to_formula)
 for i, f in BFB.id_to_formula.items():
-    print("")
-    print(f.get_type())
-    print(f.get_contents())
+    print("%d:" % i)
+    print(f.to_string(with_spaces=True))
+BFB.replace_all_occurrences_of_formula(f4, f3)
 
 f9 = BFB.gen_formula_from_string("(a && b) && (~a || ~(c || bug))")
 print(f9.to_string(with_spaces=True))
