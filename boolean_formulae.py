@@ -56,26 +56,39 @@ class BooleanFormulaeBank:
         self.tuple_id_to_numeric_id = {}
         self.id_to_formula = {}
         self.id_to_containing_ids = {}
+        self.external_label_to_formula = {}
+        self.id_to_external_labels = {}
 
     # Given a formula, f, check to see if f has already been identified.
     # If so, return the saved copy with f's identifier.
     # If not, save f as the representative copy ("reference formula") and assign it a new numeric identifier.
 
     # IMPORTANT: Assumes that all of f's sub-formulae have already been given numeric identifiers.
-    def reference_formula(self, f):
+    def reference_formula(self, f, external_label=None):
         if f.get_id() is not None:
+            if external_label is not None:
+                self.id_to_external_labels[f.get_id()].add(external_label)
+                self.external_label_to_formula[external_label] = self.id_to_formula[f.get_id()]
             return self.id_to_formula[f.get_id()]
 
         tuple_id = self.get_tuple_id(f)
         if tuple_id in self.tuple_id_to_numeric_id:
             result = self.id_to_formula[self.tuple_id_to_numeric_id[tuple_id]]
             f.set_id(result.get_id)
+            if external_label is not None:
+                self.id_to_external_labels[f.get_id()].add(external_label)
+                self.external_label_to_formula[external_label] = self.id_to_formula[f.get_id()]
             return result
 
         f.set_id(self.next_numeric_id)
         self.tuple_id_to_numeric_id[tuple_id] = self.next_numeric_id
         self.id_to_formula[self.next_numeric_id] = f
         self.id_to_containing_ids[self.next_numeric_id] = set()
+        self.id_to_external_labels[self.next_numeric_id] = set()
+        if external_label is not None:
+            self.external_label_to_formula[external_label] = f
+            self.id_to_external_labels[self.next_numeric_id].add(external_label)
+
         t = f.get_type()
         if t != BF_POS_LIT and t != BF_NEG_LIT:
             for sub_f in f.get_contents():
@@ -94,23 +107,26 @@ class BooleanFormulaeBank:
     def get_formula_from_id(self, identifier):
         return self.id_to_formula[identifier]
 
-    def gen_literal_formula(self, t, variable):
+    def get_formula_from_external_label(self, external_label):
+        return self.external_label_mapping[external_label]
+
+    def gen_literal_formula(self, t, variable, external_label=None):
         if t != BF_POS_LIT and t != BF_NEG_LIT:
             raise ValueError("Error! type t not one of the literal types")
 
-        return self.reference_formula(BooleanFormula(t, [variable], None))
+        return self.reference_formula(BooleanFormula(t, [variable], None), external_label=external_label)
 
     # Assumes that the sub_formulae have already been added to the bank. -- Does it?
-    def gen_op_formula(self, operator, sub_formulae):
+    def gen_op_formula(self, operator, sub_formulae, external_label=None):
         if operator == BF_NOT:
             if len(sub_formulae) != 1:
                 raise ValueError("Error! Cannot create NOT formula with %d sub_formulae" % len(sub_formulae))
             if sub_formulae[0].get_type() == BF_POS_LIT:
-                return self.reference_formula(BooleanFormula(BF_NEG_LIT, sub_formulae[0].get_contents(), None))
+                return self.reference_formula(BooleanFormula(BF_NEG_LIT, sub_formulae[0].get_contents(), None), external_label=external_label)
             if sub_formulae[0].get_type() == BF_NEG_LIT:
-                return self.reference_formula(BooleanFormula(BF_POS_LIT, sub_formulae[0].get_contents(), None))
+                return self.reference_formula(BooleanFormula(BF_POS_LIT, sub_formulae[0].get_contents(), None), external_label=external_label)
             if sub_formulae[0].get_type() == BF_NOT:
-                return self.reference_formula(sub_formulae[0].get_contents()[0])
+                return self.reference_formula(sub_formulae[0].get_contents()[0], external_label=external_label)
 
         elif operator == BF_AND or operator == BF_OR:
             if len(sub_formulae) == 0:
@@ -132,12 +148,12 @@ class BooleanFormulaeBank:
                 sub_formulae_unique.append(sub_f)
             sub_formulae = sub_formulae_unique
             if len(sub_formulae) == 1:
-                return self.reference_formula(sub_formulae[0])
+                return self.reference_formula(sub_formulae[0], external_label=external_label)
 
         else:
             raise ValueError("Error! operator is not one of the operator types")
 
-        return self.reference_formula(BooleanFormula(operator, list(sub_formulae), None))
+        return self.reference_formula(BooleanFormula(operator, list(sub_formulae), None), external_label=external_label)
 
     def replace_all_occurrences_of_formula(self, orig, replacement):
         orig_id = orig.get_id()
@@ -146,6 +162,11 @@ class BooleanFormulaeBank:
             raise ValueError("Error! original formula does not have an id.")
         if replacement_id is None:
             raise ValueError("Error! replacement formula does not have an id.")
+
+        # Transition all of orig's external labels to point to replacement.
+        for external_label in self.id_to_external_labels[orig_id]:
+            self.id_to_external_labels[replacement_id].add(external_label)
+            self.external_label_to_formula[external_label] = replacement
 
         # Update records for all containers of the original formula
         for container_id in self.id_to_containing_ids[orig_id]:
@@ -352,12 +373,12 @@ f3 = BFB.gen_literal_formula(BF_NEG_LIT, "x2")
 f4 = BFB.gen_op_formula(BF_AND, [f1, f2])
 f5 = BFB.gen_op_formula(BF_NOT, [f1])
 f6 = BFB.gen_op_formula(BF_NOT, [f4])
-f7 = BFB.gen_op_formula(BF_NOT, [f6])
+f7 = BFB.gen_op_formula(BF_NOT, [f6], external_label="the double negation")
 f8 = BFB.gen_op_formula(BF_OR, [f3, f6])
 f9 = BFB.gen_op_formula(BF_AND, [f4, f1])
-f10 = BFB.gen_literal_formula(BF_POS_LIT, "x3")
-f11 = BFB.gen_op_formula(BF_AND, [f3, f10])
-f12 = BFB.gen_op_formula(BF_AND, [f1, f1, f1, f2, f3])
+f10 = BFB.gen_literal_formula(BF_POS_LIT, "x3", external_label="that which was replaced.")
+f11 = BFB.gen_op_formula(BF_AND, [f3, f10], external_label="f11")
+f12 = BFB.gen_op_formula(BF_AND, [f1, f1, f1, f2, f3], external_label="f12")
 BFB.replace_all_occurrences_of_formula(f10, f4)
 print(f5.get_type() == BF_NEG_LIT)
 print(f6.get_type() == BF_NOT)
@@ -367,6 +388,7 @@ print(f9 == f4)
 print(f11.get_id() not in BFB.id_to_formula)
 for i, f in BFB.id_to_formula.items():
     print("%d:" % i)
+    print("External Labels: %s" % (str([l for l in BFB.id_to_external_labels[i]])))
     print(f.to_string(with_spaces=True))
 BFB.replace_all_occurrences_of_formula(f4, f3)
 
