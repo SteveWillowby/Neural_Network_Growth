@@ -108,7 +108,7 @@ class BooleanFormulaeBank:
         return self.id_to_formula[identifier]
 
     def get_formula_from_external_label(self, external_label):
-        return self.external_label_mapping[external_label]
+        return self.external_label_to_formula[external_label]
 
     def gen_literal_formula(self, t, variable, external_label=None):
         if t != BF_POS_LIT and t != BF_NEG_LIT:
@@ -160,8 +160,14 @@ class BooleanFormulaeBank:
         replacement_id = replacement.get_id()
         if orig_id is None:
             raise ValueError("Error! original formula does not have an id.")
+        if orig_id not in self.id_to_formula:
+            raise ValueError("Error! original formula is no longer in the BFB.")
         if replacement_id is None:
             raise ValueError("Error! replacement formula does not have an id.")
+        if replacement_id not in self.id_to_formula:
+            raise ValueError("Error! replacement formula is no longer in the BFB.")
+        if orig_id == replacement_id:
+            return orig
 
         # Transition all of orig's external labels to point to replacement.
         for external_label in self.id_to_external_labels[orig_id]:
