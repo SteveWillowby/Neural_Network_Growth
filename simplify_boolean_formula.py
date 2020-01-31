@@ -10,8 +10,9 @@ def simplify_boolean_formula(bf, filename="espresso_binaries/formula_to_simplify
         bfb = BooleanFormulaeBank()
         bf = bfb.gen_formula_from_string(bf.to_string())
 
+    our_var_ids = {}
     bf = ands_flushed_out(bf, bfb)
-    simplified, _ = advanced_simplify_boolean_formula(bf, filename, bfb)
+    simplified, _ = advanced_simplify_boolean_formula(bf, filename=filename, bfb=bfb, var_ids=our_var_ids)
     return simplified
 
 def ands_flushed_out(bf, bfb):
@@ -67,12 +68,17 @@ def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to
         # Get the formula for these new negated assignments.
         simplified = formula_from_assignments(assignments, var_ids, filename, bfb, negated=False)
         assignments_bank[simplified.get_id()] = assignments
+        assignments_bank[sub_f.get_id()] = assignments
         print("Completed at depth: %s%s" % ("".join(["   " for i in range(0, 10 - depth)]), depth))
         return simplified, next_var_id
 
     # An OR. Simplify all the sub-formulae first.
     # It needs to be this fancy in case ids change as sub-formulae are simplified.
     # Even the CURRENT formula could change.
+    for sub_f in bf.get_contents():
+        simplified, next_var_id = advanced_simplify_boolean_formula(sub_f, filename, bfb, assignments_bank, var_ids, next_var_id, depth+1)
+        assignments_bank[sub_f.get_id()] = assignments_bank[simplified.get_id()]
+    """
     contents = bf.get_contents()
     contents_copy = list(contents)
     for i in range(0, len(contents)):
@@ -80,9 +86,12 @@ def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to
         prev_id = sub_f.get_id()
         simplified, next_var_id = advanced_simplify_boolean_formula(sub_f, filename, bfb, assignments_bank, var_ids, next_var_id, depth+1)
         new_id = simplified.get_id()
-        # assignments_bank[new_id] = assignments_bank[prev_id]
+        if new_id not in assignments_bank:
+            raise ValueError("Error. New formula not given an id.")
+            # assignments_bank[new_id] = assignments_bank[prev_id]
         contents_copy[i] = simplified
     bf = bfb.gen_op_formula(bf.get_type(), contents_copy)
+    """
     """
     completed = set()
     anything_unexpected = False
@@ -105,7 +114,7 @@ def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to
     if bf.get_type() != BF_AND and bf.get_type() != BF_OR:
         print("Eh?")
         return advanced_simplify_boolean_formula(bf, filename, bfb, assignments_bank, var_ids, next_var_id, depth)
-    
+
     if bf.get_type() == BF_OR:
         # An or of ors of ands
         satisfying_assignments_for_sub_fs = []
@@ -164,7 +173,7 @@ def assignments_from_assignments(satisfying_assignments, var_ids, filename, nega
     new_assignments = []
     for line in lines:
         new_assignment = []
-        for i in range(0, len(var_ids)):
+        for i in range(0, len(idx_to_var_name)):
             char = line[i]
             if char == "1":
                 new_assignment.append((var_ids[idx_to_var_name[i]], True))
@@ -175,44 +184,40 @@ def assignments_from_assignments(satisfying_assignments, var_ids, filename, nega
         new_assignments.append(new_assignment)
     return new_assignments
 
-GC = 0
-
 def create_espresso_input_file(satisfying_assignments, var_ids, filename, negated=False):
     id_to_var = {i: v for v, i in var_ids.items()}
+    relevant_id_to_var = {}
+    for assignment in satisfying_assignments:
+        for (i, _) in assignment:
+            relevant_id_to_var[i] = id_to_var[i]
+
+    id_to_idx = sorted([i for i, var in relevant_id_to_var.items()])
+    id_to_idx = {id_to_idx[idx]: idx for idx in range(0, len(id_to_idx))}
+    idx_to_var = {idx: id_to_var[i] for i, idx in id_to_idx.items()}
 
     f = open(filename, "w")
-    f.write(".i %d\n" % len(var_ids)) # Number of inputs
+    f.write(".i %d\n" % len(relevant_id_to_var)) # Number of inputs
     f.write(".o 1\n") # 1 output
-    var_names_in_order = [" %s" % x[1] for x in sorted([(i, var) for i, var in id_to_var.items()])]
+    var_names_in_order = [" %s" % idx_to_var[i] for i in range(0, len(idx_to_var))]
     f.write(".ilb %s\n" % "".join(var_names_in_order))
     f.write(".ob OUTPUT\n") # Name of output.
     f.write(".phase %d\n" % (1 - int(negated)))
 
     for assignment in satisfying_assignments:
-        assignment_array = ["-" for var in range(0, len(var_ids))]
+        assignment_array = ["-" for var in range(0, len(relevant_id_to_var))]
         for (var_id, true_or_false) in assignment:
             if true_or_false:
-                assignment_array[var_id] = "1"
+                assignment_array[id_to_idx[var_id]] = "1"
             else:
-                assignment_array[var_id] = "0"
+                assignment_array[id_to_idx[var_id]] = "0"
         assignment_array.append(" 1\n")
         f.write("".join(assignment_array))
 
     f.write(".e\n")
     f.close()
-
-    print(id_to_var)
-    print("\n")
-    f = open(filename, "r")
-    for line in f.readlines():
-        print(line[:-1])
-    print("\n")
-    f.close()
-    GC += 1
-    if GC > 20:
-        exit(0)
     return [x[1:] for x in var_names_in_order]
 
+"""
 def get_satisfying_assignments(bf, var_ids, next_var_id=0, depth=0):
     print("Sat assign called")
     assignments = []
@@ -270,6 +275,7 @@ def get_satisfying_assignments(bf, var_ids, next_var_id=0, depth=0):
         final_assignments.append(assignment)
     print("Found sat assign at depth: %s%s" % ("".join(["   " for i in range(0, 10 - depth)]), depth))
     return next_var_id, final_assignments
+"""
 
 def negate_assignments(assignments):
     # Not of or of ands <-> and of or of nots
