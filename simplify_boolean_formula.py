@@ -175,6 +175,8 @@ def assignments_from_assignments(satisfying_assignments, var_ids, filename, nega
         new_assignments.append(new_assignment)
     return new_assignments
 
+GC = 0
+
 def create_espresso_input_file(satisfying_assignments, var_ids, filename, negated=False):
     id_to_var = {i: v for v, i in var_ids.items()}
 
@@ -198,6 +200,17 @@ def create_espresso_input_file(satisfying_assignments, var_ids, filename, negate
 
     f.write(".e\n")
     f.close()
+
+    print(id_to_var)
+    print("\n")
+    f = open(filename, "r")
+    for line in f.readlines():
+        print(line[:-1])
+    print("\n")
+    f.close()
+    GC += 1
+    if GC > 20:
+        exit(0)
     return [x[1:] for x in var_names_in_order]
 
 def get_satisfying_assignments(bf, var_ids, next_var_id=0, depth=0):
