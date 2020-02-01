@@ -1,6 +1,7 @@
 from boolean_formulae import *
 import subprocess
 import sys
+import time
 
 # Check out https://users.ece.utexas.edu/~patt/06s.382N/tutorial/espresso_manual.html
 # Also: http://www.ecs.umass.edu/ece/labs/vlsicad/ece667/links/espresso.html
@@ -33,12 +34,13 @@ def ands_flushed_out(bf, bfb):
     return bfb.gen_op_formula(bf.get_type(), contents)
 
 def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to_simplify", bfb=None, assignments_bank={}, var_ids={}, next_var_id=0, depth=0):
+    start_t = time.time()
     if bfb is None:
         bfb = BooleanFormulaeBank()
         bf = bfb.gen_formula_from_string(bf.to_string())
 
     if bf.get_id() in assignments_bank: # If this formula has already been simplified.
-        print("Already done @dpth: %s%s" % ("".join(["   " for i in range(0, 15 - depth)]), depth))
+        print("Already done @dpth: %s%s  (%d)" % ("".join(["   " for i in range(0, 15 - depth)]), depth, time.time() - start_t))
         return bf, next_var_id
 
     if bf.get_type() == BF_POS_LIT or bf.get_type() == BF_NEG_LIT:
@@ -48,7 +50,7 @@ def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to
             var_ids[var_name] = next_var_id
             next_var_id += 1
         assignments_bank[bf.get_id()] = [[(var_ids[var_name], bf.get_type() == BF_POS_LIT)]]
-        print("Literal   at depth: %s%s" % ("".join(["   " for i in range(0, 15 - depth)]), depth))
+        print("Literal   at depth: %s%s  (%d)" % ("".join(["   " for i in range(0, 15 - depth)]), depth, time.time() - start_t))
         return bf, next_var_id
 
     the_label = str(bfb.get_tuple_id(bf)) # Make sure to tag this formula uniquely so we can access it later.
@@ -69,7 +71,7 @@ def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to
         simplified = formula_from_assignments(assignments, var_ids, filename, bfb, negated=False)
         assignments_bank[simplified.get_id()] = assignments
         assignments_bank[sub_f.get_id()] = assignments
-        print("Completed ~ @depth: %s%s" % ("".join(["   " for i in range(0, 15 - depth)]), depth))
+        print("Completed ~ @depth: %s%s  (%d)" % ("".join(["   " for i in range(0, 15 - depth)]), depth, time.time() - start_t))
         return simplified, next_var_id
 
     # An OR. Simplify all the sub-formulae first.
@@ -125,7 +127,7 @@ def advanced_simplify_boolean_formula(bf, filename="espresso_binaries/formula_to
         # Get the formula for these new negated assignments.
         simplified = formula_from_assignments(assignments, var_ids, filename, bfb, negated=False)
         assignments_bank[simplified.get_id()] = assignments
-        print("Completed OR @dpth: %s%s" % ("".join(["   " for i in range(0, 15 - depth)]), depth))
+        print("Completed OR @dpth: %s%s  (%d)" % ("".join(["   " for i in range(0, 15 - depth)]), depth, time.time() - start_t))
         return simplified, next_var_id
 
     raise ValueError("The formula was supposed to have all ANDs flushed out!")
