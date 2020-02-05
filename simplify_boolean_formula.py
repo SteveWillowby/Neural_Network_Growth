@@ -219,66 +219,6 @@ def create_espresso_input_file(satisfying_assignments, var_ids, filename, negate
     f.close()
     return [x[1:] for x in var_names_in_order]
 
-"""
-def get_satisfying_assignments(bf, var_ids, next_var_id=0, depth=0):
-    print("Sat assign called")
-    assignments = []
-    if bf.get_type() == BF_POS_LIT or bf.get_type() == BF_NEG_LIT:
-        var = bf.get_contents()[0]
-        if var in var_ids:
-            var_id = var_ids[var]
-        else:
-            var_id = next_var_id
-            var_ids[var] = next_var_id
-            next_var_id += 1
-        truth_assignment = bf.get_type() == BF_POS_LIT
-        assignments.append([(var_id, truth_assignment)])
-    elif bf.get_type() == BF_NOT:
-        # Assignments from sub-calls are essentially DNFs.
-        next_var_id, sub_assignments = get_satisfying_assignments(bf.get_contents()[0], var_ids, next_var_id, depth+1)
-        # after applying the negation it's in the form:
-        # (~x1 or ~x2 or ~~x3) and (~x1 or ~x5) and ...
-
-        negate_assignments(sub_assignments)
-
-        # A satisfying assignment is thus a negation of a literal from one of each of the sub_assignments.
-        limits = [len(sa) - 1 for sa in sub_assignments]
-        counters = [0 for sa in sub_assignments]
-        counters[-1] = -1
-        print(limits)
-        print(depth)
-        while increment_counters_with_limits(counters, limits):
-            assignments.append(list(set([(sub_assignments[i][counters[i]][0], not sub_assignments[i][counters[i]][1]) for i in range(0, len(counters))])))
-    elif bf.get_type() == BF_OR:
-        for sub_f in bf.get_contents():
-            next_var_id, sub_assignments = get_satisfying_assignments(sub_f, var_ids, next_var_id, depth+1)
-            assignments += sub_assignments
-    else: # BF_AND
-        # Here we have an and-of-or-of-ands situation.
-        sub_results = []
-        for sub_f in bf.get_contents():
-            next_var_id, sub_assignments = get_satisfying_assignments(sub_f, var_ids, next_var_id, depth+1)
-            sub_results.append(sub_assignments)
-        limits = [len(sr) - 1 for sr in sub_results]
-        counters = [0 for sr in sub_results]
-        counters[-1] = -1
-        while increment_counters_with_limits(counters, limits):
-            assignments.append(list(set(list_concat([sub_results[i][counters[i]] for i in range(0, len(counters))]))))
-
-    assignment_hashes = set()
-    final_assignments = []
-    for assignment in assignments:
-        if len(set([x[0] for x in assignment])) < len(assignment):
-            continue
-        hashable = tuple(sorted(assignment))
-        if hashable in assignment_hashes:
-            continue
-        assignment_hashes.add(hashable)
-        final_assignments.append(assignment)
-    print("Found sat assign at depth: %s%s" % ("".join(["   " for i in range(0, 10 - depth)]), depth))
-    return next_var_id, final_assignments
-"""
-
 def negate_assignments(assignments):
     # Not of or of ands <-> and of or of nots
     # Want to get back to or of ands
@@ -330,14 +270,24 @@ print(d.to_string(with_spaces=True))
 #for assignment in assignments:
 #    print([(reverse_var_ids[x[0]], x[1]) for x in assignment])
 
-d2 = simplify_boolean_formula(d)
-print(d2.to_string(with_spaces=True))
+# d2 = simplify_boolean_formula(d)
+# print(d2.to_string(with_spaces=True))
 
 f = open("./saved_5_nn_formulae.txt")
 first_formula = f.readline()
 if first_formula[-1] == "\n":
     first_formula = first_formula[0:-1]
+f.close()
 orig = BFB.gen_formula_from_string(first_formula)
+orig_eqn_tott_string = orig.to_string(and_str="&", or_str="|", not_str="!", with_spaces=True)
+import re
+orig_eqn_tott_string = re.split('(\W+)', orig_eqn_tott_string)
+digit_set = set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+for i in range(0, len(orig_eqn_tott_string)):
+    if len(orig_eqn_tott_string[i]) > 0 and str(orig_eqn_tott_string[i][0]) in digit_set:
+        orig_eqn_tott_string[i] = "x%s" % orig_eqn_tott_string[i]
+print("".join(orig_eqn_tott_string))
+exit(0)
 print("The original formula had %d characters" % len(orig.to_string(with_spaces=False)))
 simplified = simplify_boolean_formula(orig, bfb=BFB)
 print("The simplified formula had %d characters" % len(simplified.to_string(with_spaces=False)))
